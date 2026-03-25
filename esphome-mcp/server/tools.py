@@ -82,18 +82,35 @@ def _run(cmd: list[str], timeout: int = 120, cwd: str | None = None) -> str:
         return f"Command not found: {e}"
 
 
+def _make_esphome_loader():
+    """Create a YAML loader that handles all ESPHome custom tags.
+
+    ESPHome configs use !secret, !lambda, !include, !extend, etc.
+    We only need to extract the esphome: section for device info,
+    so we pass through all custom tags without interpreting them.
+    """
+
+    class ESPHomeLoader(yaml.SafeLoader):
+        pass
+
+    def _passthrough(loader, tag_suffix, node):
+        if isinstance(node, yaml.ScalarNode):
+            return loader.construct_scalar(node)
+        if isinstance(node, yaml.SequenceNode):
+            return loader.construct_sequence(node)
+        if isinstance(node, yaml.MappingNode):
+            return loader.construct_mapping(node)
+        return None
+
+    ESPHomeLoader.add_multi_constructor("!", _passthrough)
+    return ESPHomeLoader
+
+
 def _parse_device_info(yaml_path: str) -> dict:
     """Parse basic device info from a YAML file."""
     try:
         with open(yaml_path, encoding="utf-8") as f:
-            class SecretLoader(yaml.SafeLoader):
-                pass
-
-            def secret_constructor(loader, node):
-                return f"!secret {loader.construct_scalar(node)}"
-
-            SecretLoader.add_constructor("!secret", secret_constructor)
-            data = yaml.load(f, Loader=SecretLoader)
+            data = yaml.load(f, Loader=_make_esphome_loader())
 
         esphome_section = data.get("esphome", {})
         return {

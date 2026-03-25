@@ -7,6 +7,17 @@ All notable changes to this project will be documented in this file.
 - **Bert Berrevoets** — Project author
 - **Claude Code** — AI-assisted development
 
+## [1.2.3] - 2026-03-25
+
+### Fixed
+
+Author: *Claude Code*
+
+- **list_devices fails on configs with !lambda** -- YAML parser only handled
+  the !secret tag; configs using !lambda, !include, or other ESPHome tags caused
+  a YAML parse error. Replaced single-tag handler with multi-constructor that
+  passes through all ESPHome custom YAML tags.
+
 ## [1.2.2] - 2026-03-25
 
 ### Fixed
