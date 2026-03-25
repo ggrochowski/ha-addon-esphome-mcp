@@ -163,7 +163,7 @@ def compile_device(device: str) -> str:
     yaml_path = _device_yaml_path(device)
     if not os.path.isfile(yaml_path):
         return f"Device config not found: {yaml_path}"
-    return _run([ESPHOME_BIN, "compile", yaml_path], timeout=300)
+    return _run([ESPHOME_BIN, "compile", yaml_path], timeout=900)
 
 
 def flash(device: str) -> str:
