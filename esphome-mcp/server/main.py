@@ -4,8 +4,11 @@ import json
 import logging
 import os
 
+import anyio
 import uvicorn
 from mcp.server.fastmcp import FastMCP
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from . import tools
 from .auth import BearerAuthMiddleware
@@ -131,9 +134,33 @@ def esphome_pull_fonts(filenames: list[str] | None = None) -> str:
 
 
 # ---------------------------------------------------------------------------
-# ASGI app with auth middleware
+# Middleware to suppress ClosedResourceError in stateless HTTP sessions.
+#
+# In stateless_http mode the MCP SDK sends log notifications back to the
+# client.  If the client disconnects before the response completes, the
+# send raises anyio.ClosedResourceError which crashes the session handler
+# and fills the log with "[ERROR] Stateless session crashed" tracebacks.
+# The server continues working, but the noise is confusing.
+#
+# This middleware catches the error at the ASGI boundary so it becomes a
+# clean debug-level log line instead of a scary traceback.
+# ---------------------------------------------------------------------------
+class SuppressClosedResourceMiddleware(BaseHTTPMiddleware):
+    """Catch anyio.ClosedResourceError raised when clients disconnect early."""
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            return await call_next(request)
+        except anyio.ClosedResourceError:
+            log.debug("Client disconnected during response (ClosedResourceError suppressed)")
+            return None  # Connection already gone; nothing to send
+
+
+# ---------------------------------------------------------------------------
+# ASGI app with middleware stack (order: outer → inner)
 # ---------------------------------------------------------------------------
 app = mcp.streamable_http_app()
+app.add_middleware(SuppressClosedResourceMiddleware)
 app.add_middleware(BearerAuthMiddleware)
 
 
