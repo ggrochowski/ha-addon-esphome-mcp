@@ -8,8 +8,9 @@ ENV UV_INDEX_STRATEGY=unsafe-best-match
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install build dependencies for ESPHome native compilation
-# libc6-compat: provides glibc compatibility layer so PlatformIO's pre-compiled
-#   glibc-linked tools (cmake, ninja, xtensa toolchain) can run on Alpine/musl
+# gcompat: full glibc compatibility layer for musl — required because PlatformIO
+#   downloads glibc-linked binaries (cmake, ninja, xtensa toolchain) that need
+#   proper glibc mmap behavior. libc6-compat alone causes 44GB mmap failures.
 RUN apk add --no-cache \
     build-base \
     libffi-dev \
@@ -22,7 +23,7 @@ RUN apk add --no-cache \
     patch \
     libmagic \
     cairo \
-    libc6-compat
+    gcompat
 
 # Install uv (same version as ESPHome official image) and upgrade pip
 RUN pip3 install --no-cache-dir -U pip uv==0.10.1
