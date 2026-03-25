@@ -1,10 +1,14 @@
 """Bearer token authentication middleware for the MCP server."""
 
+import hmac
+import logging
 import os
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+
+log = logging.getLogger("esphome-mcp")
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
@@ -17,7 +21,11 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
 
         expected_token = os.environ.get("ESPHOME_MCP_AUTH_TOKEN", "")
         if not expected_token:
-            return await call_next(request)
+            log.error("ESPHOME_MCP_AUTH_TOKEN is not set -- rejecting all requests")
+            return JSONResponse(
+                {"error": "Server misconfigured: auth token not set"},
+                status_code=503,
+            )
 
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
@@ -27,7 +35,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             )
 
         token = auth_header[len("Bearer "):]
-        if token != expected_token:
+        if not hmac.compare_digest(token, expected_token):
             return JSONResponse(
                 {"error": "Invalid token"},
                 status_code=403,

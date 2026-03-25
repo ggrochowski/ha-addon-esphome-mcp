@@ -18,10 +18,26 @@ ESPHOME_BIN = "esphome"
 
 FORBIDDEN_FILES = {"secrets.yaml", ".secret.yaml"}
 
+# Resolved absolute path for path traversal checks
+_ESPHOME_DIR_REAL = os.path.realpath(ESPHOME_DIR)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+def _safe_path(base_dir: str, user_path: str) -> str:
+    """Resolve a user-supplied path and verify it stays within base_dir.
+
+    Raises ValueError if the resolved path escapes the base directory.
+    """
+    joined = os.path.join(base_dir, user_path)
+    resolved = os.path.realpath(joined)
+    base_resolved = os.path.realpath(base_dir)
+    if not resolved.startswith(base_resolved + os.sep) and resolved != base_resolved:
+        raise ValueError(f"Path traversal blocked: {user_path!r} resolves outside {base_dir}")
+    return resolved
+
+
 def _resolve_device(device: str) -> str:
     """Resolve a device name to its YAML filename (without path)."""
     if not device.endswith(".yaml"):
@@ -32,10 +48,11 @@ def _resolve_device(device: str) -> str:
 def _device_yaml_path(device: str) -> str:
     """Return the full path to a device YAML file."""
     filename = _resolve_device(device)
-    path = os.path.join(ESPHOME_DIR, filename)
+    # Validate path stays within ESPHOME_DIR
+    path = _safe_path(ESPHOME_DIR, filename)
     if os.path.isfile(path):
         return path
-    archive_path = os.path.join(ESPHOME_DIR, "archive", filename)
+    archive_path = _safe_path(os.path.join(ESPHOME_DIR, "archive"), filename)
     if os.path.isfile(archive_path):
         return archive_path
     return path
@@ -187,8 +204,12 @@ def push_files(files: dict[str, str]) -> str:
             results.append(f"{filename}: REJECTED (only .yaml files allowed)")
             continue
 
-        # Support archive/ subdirectory
-        target = os.path.join(ESPHOME_DIR, filename)
+        try:
+            target = _safe_path(ESPHOME_DIR, filename)
+        except ValueError as e:
+            results.append(f"{filename}: REJECTED ({e})")
+            continue
+
         os.makedirs(os.path.dirname(target), exist_ok=True)
 
         try:
@@ -223,11 +244,19 @@ def pull_files(filenames: list[str] | None = None) -> dict[str, str]:
         for fn in filenames:
             if not fn.endswith(".yaml"):
                 fn = f"{fn}.yaml"
-            path = os.path.join(ESPHOME_DIR, fn)
+            try:
+                path = _safe_path(ESPHOME_DIR, fn)
+            except ValueError:
+                continue
             if os.path.isfile(path):
                 paths.append(path)
             else:
-                archive_path = os.path.join(ESPHOME_DIR, "archive", fn)
+                try:
+                    archive_path = _safe_path(
+                        os.path.join(ESPHOME_DIR, "archive"), fn
+                    )
+                except ValueError:
+                    continue
                 if os.path.isfile(archive_path):
                     paths.append(archive_path)
 
