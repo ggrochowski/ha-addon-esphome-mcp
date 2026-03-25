@@ -1,43 +1,15 @@
+# Use the official ESPHome HA add-on image as base — it already has ESPHome,
+# PlatformIO, and all cross-compilation toolchains correctly configured.
+# This avoids glibc/musl incompatibility issues with PlatformIO's pre-compiled
+# binaries (cmake, ninja, xtensa toolchain) on Alpine.
 ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
-# Match ESPHome's musl wheel index for pre-compiled Alpine packages
-ENV UV_EXTRA_INDEX_URL=https://wheels.home-assistant.io/musllinux-index/
-ENV UV_SYSTEM_PYTHON=true
-ENV UV_INDEX_STRATEGY=unsafe-best-match
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1
-
-# Install build dependencies for ESPHome native compilation
-# gcompat: full glibc compatibility layer for musl — required because PlatformIO
-#   downloads glibc-linked binaries (cmake, ninja, xtensa toolchain) that need
-#   proper glibc mmap behavior. libc6-compat alone causes 44GB mmap failures.
-RUN apk add --no-cache \
-    build-base \
-    libffi-dev \
-    openssl-dev \
-    rust \
-    cargo \
-    git \
-    curl \
-    bash \
-    patch \
-    libmagic \
-    cairo \
-    gcompat
-
-# Install uv (same version as ESPHome official image) and upgrade pip
-RUN pip3 install --no-cache-dir -U pip uv==0.10.1
-
-# Install Python dependencies and ESPHome
+# Install MCP server Python dependencies
+# ESPHome and its deps are already in the base image
 COPY requirements.txt /tmp/
-RUN uv pip install --no-cache-dir -r /tmp/requirements.txt \
-    && uv pip install --no-cache-dir esphome \
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt \
     && rm /tmp/requirements.txt
-
-# Pre-configure PlatformIO to avoid first-run setup at compile time
-RUN platformio settings set enable_telemetry No \
-    && platformio settings set check_platformio_interval 1000000 \
-    && mkdir -p /piolibs
 
 # Copy server code
 COPY server/ /opt/server/
